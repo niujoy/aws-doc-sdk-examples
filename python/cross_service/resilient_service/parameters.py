@@ -9,10 +9,6 @@ from botocore.exceptions import ClientError
 log = logging.getLogger(__name__)
 
 
-class ParameterHelperError(Exception):
-    pass
-
-
 # snippet-start:[python.example_code.workflow.ResilientService_ParameterHelper]
 class ParameterHelper:
     """
@@ -62,9 +58,8 @@ class ParameterHelper:
             )
             log.info("Setting demo parameter %s to '%s'.", name, value)
         except ClientError as err:
-            raise ParameterHelperError(
-                f"Couldn't set parameter {name} to {value}: {err}"
-            )
+            log.error(f"Couldn't set parameter {name} to {value}: {err}")
+            raise
 
 
 # snippet-end:[python.example_code.workflow.ResilientService_ParameterHelper]

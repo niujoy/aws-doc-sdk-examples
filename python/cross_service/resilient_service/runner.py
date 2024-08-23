@@ -15,6 +15,7 @@ import logging
 from pprint import pp
 import sys
 
+import random
 import requests
 
 from auto_scaler import AutoScaler
@@ -262,10 +263,8 @@ class Runner:
         )
         self.autoscaler.create_instance_profile(
             ssm_only_policy,
-            self.autoscaler.bad_creds_policy_name,
-            self.autoscaler.bad_creds_role_name,
-            self.autoscaler.bad_creds_profile_name,
             ["AmazonSSMManagedInstanceCore"],
+            fail=True
         )
         instances = self.autoscaler.get_instances()
         bad_instance_id = instances[0]
@@ -379,11 +378,11 @@ def main():
     )
     print("-" * 88)
 
-    prefix = "doc-example-resilience"
+    prefix = f"doc-example-resilience-{random.randint(100, 999)}"
     recommendation = RecommendationService.from_client(
         "doc-example-recommendation-service"
     )
-    autoscaler = AutoScaler.from_client(prefix)
+    autoscaler = AutoScaler.from_client()
     loadbalancer = LoadBalancer.from_client(prefix)
     param_helper = ParameterHelper.from_client(recommendation.table_name)
     runner = Runner(

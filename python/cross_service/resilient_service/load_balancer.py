@@ -11,10 +11,6 @@ import requests
 log = logging.getLogger(__name__)
 
 
-class LoadBalancerError(Exception):
-    pass
-
-
 # snippet-start:[python.example_code.workflow.ResilientService_LoadBalancer]
 # snippet-start:[python.cross_service.resilient_service.LoadBalancer.decl]
 class LoadBalancer:
@@ -31,8 +27,6 @@ class LoadBalancer:
         self.elb_client = elb_client
         self._endpoint = None
 
-    # snippet-end:[python.cross_service.resilient_service.LoadBalancer.decl]
-
     @classmethod
     def from_client(cls, resource_prefix):
         """
@@ -43,7 +37,6 @@ class LoadBalancer:
         elb_client = boto3.client("elbv2")
         return cls(f"{resource_prefix}-tg", f"{resource_prefix}-lb", elb_client)
 
-    # snippet-start:[python.cross_service.resilient_service.elbv2.DescribeLoadBalancers]
     def endpoint(self):
         """
         Gets the HTTP endpoint of the load balancer.
@@ -57,12 +50,13 @@ class LoadBalancer:
                 )
                 self._endpoint = response["LoadBalancers"][0]["DNSName"]
             except ClientError as err:
-                raise LoadBalancerError(
+                log.error(
                     f"Couldn't get the endpoint for load balancer {self.load_balancer_name}: {err}"
                 )
+                raise
         return self._endpoint
 
-    # snippet-end:[python.cross_service.resilient_service.elbv2.DescribeLoadBalancers]
+    # snippet-end:[python.cross_service.resilient_service.LoadBalancer.decl]
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.CreateTargetGroup]
     def create_target_group(self, protocol, port, vpc_id):
@@ -95,11 +89,11 @@ class LoadBalancer:
             target_group = response["TargetGroups"][0]
             log.info("Created load balancing target group %s.", self.target_group_name)
         except ClientError as err:
-            raise LoadBalancerError(
+            log.error(
                 f"Couldn't create load balancing target group {self.target_group_name}: {err}"
             )
-        else:
-            return target_group
+            raise
+        return target_group
 
     # snippet-end:[python.cross_service.resilient_service.elbv2.CreateTargetGroup]
 
@@ -121,21 +115,23 @@ class LoadBalancer:
                 )
                 done = True
             except ClientError as err:
-                if err.response["Error"]["Code"] == "TargetGroupNotFound":
+                error_code = err.response["Error"]["Code"]
+                if error_code == "TargetGroupNotFound":
                     log.info(
                         "Load balancer target group %s not found, nothing to do.",
                         self.target_group_name,
                     )
                     done = True
-                elif err.response["Error"]["Code"] == "ResourceInUse":
+                elif error_code == "ResourceInUse":
                     log.info(
                         "Target group not yet released from load balancer, waiting..."
                     )
                     time.sleep(10)
                 else:
-                    raise LoadBalancerError(
+                    log.error(
                         f"Couldn't delete load balancing target group {self.target_group_name}: {err}"
                     )
+                    raise
 
     # snippet-end:[python.cross_service.resilient_service.elbv2.DeleteTargetGroup]
 
@@ -178,10 +174,10 @@ class LoadBalancer:
                 target_group["TargetGroupName"],
             )
         except ClientError as err:
-            raise LoadBalancerError(
-                f"Failed to create load balancer {self.load_balancer_name}"
-                f"and add a listener for target group {target_group['TargetGroupName']}: {err}"
+            log.error(
+                f"Failed to create load balancer {self.load_balancer_name} and add a listener for target group {target_group['TargetGroupName']}: {err}"
             )
+            raise
         else:
             self._endpoint = load_balancer["DNSName"]
             return load_balancer
@@ -205,15 +201,17 @@ class LoadBalancer:
             log.info("Waiting for load balancer to be deleted...")
             waiter.wait(Names=[self.load_balancer_name])
         except ClientError as err:
-            if err.response["Error"]["Code"] == "LoadBalancerNotFound":
+            error_code = err.response["Error"]["Code"]
+            if error_code == "LoadBalancerNotFound":
                 log.info(
                     "Load balancer %s does not exist, nothing to do.",
                     self.load_balancer_name,
                 )
             else:
-                raise LoadBalancerError(
+                log.error(
                     f"Couldn't delete load balancer {self.load_balancer_name}: {err}"
                 )
+                raise
 
     # snippet-end:[python.cross_service.resilient_service.elbv2.DeleteLoadBalancer]
 
@@ -257,11 +255,11 @@ class LoadBalancer:
                 TargetGroupArn=tg_response["TargetGroups"][0]["TargetGroupArn"]
             )
         except ClientError as err:
-            raise LoadBalancerError(
+            log.error(
                 f"Couldn't check health of {self.target_group_name} targets: {err}"
             )
-        else:
-            return health_response["TargetHealthDescriptions"]
+            raise
+        return health_response["TargetHealthDescriptions"]
 
     # snippet-end:[python.cross_service.resilient_service.elbv2.DescribeTargetHealth]
 

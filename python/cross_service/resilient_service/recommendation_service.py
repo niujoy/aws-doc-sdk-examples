@@ -10,13 +10,6 @@ from botocore.exceptions import ClientError
 log = logging.getLogger(__name__)
 
 
-class RecommendationServiceError(Exception):
-    def __init__(self, table_name, message):
-        self.table_name = table_name
-        self.message = message
-        super().__init__(self.message)
-
-
 # snippet-start:[python.example_code.workflow.ResilientService_RecommendationService]
 class RecommendationService:
     """
@@ -68,15 +61,13 @@ class RecommendationService:
             waiter = self.dynamodb_client.get_waiter("table_exists")
             waiter.wait(TableName=self.table_name)
             log.info("Table %s created.", self.table_name)
+            return response
         except ClientError as err:
             if err.response["Error"]["Code"] == "ResourceInUseException":
-                log.info("Table %s exists, nothing to be do.", self.table_name)
+                log.info("Table %s exists, nothing to do.", self.table_name)
             else:
-                raise RecommendationServiceError(
-                    self.table_name, f"ClientError when creating table: {err}."
-                )
-        else:
-            return response
+                log.error(f"ClientError when creating table {self.table_name}: {err}")
+                raise
 
     def populate(self, data_file):
         """
@@ -93,9 +84,10 @@ class RecommendationService:
                 "Populated table %s with items from %s.", self.table_name, data_file
             )
         except ClientError as err:
-            raise RecommendationServiceError(
-                self.table_name, f"Couldn't populate table from {data_file}: {err}"
+            log.error(
+                f"Couldn't populate table {self.table_name} from {data_file}: {err}"
             )
+            raise
 
     def destroy(self):
         """
@@ -111,9 +103,8 @@ class RecommendationService:
             if err.response["Error"]["Code"] == "ResourceNotFoundException":
                 log.info("Table %s does not exist, nothing to do.", self.table_name)
             else:
-                raise RecommendationServiceError(
-                    self.table_name, f"ClientError when deleting table: {err}."
-                )
+                log.error(f"ClientError when deleting table {self.table_name}: {err}")
+                raise
 
 
 # snippet-end:[python.example_code.workflow.ResilientService_RecommendationService]
