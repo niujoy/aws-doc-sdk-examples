@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import logging
+from typing import Type
 
 import boto3
 from botocore.exceptions import ClientError
@@ -10,6 +11,9 @@ log = logging.getLogger(__name__)
 
 
 class ParameterHelperError(Exception):
+    """
+    Custom exception for ParameterHelper errors.
+    """
     pass
 
 
@@ -21,12 +25,14 @@ class ParameterHelper:
     how the service responds to a health check.
     """
 
-    table = "doc-example-resilient-architecture-table"
-    failure_response = "doc-example-resilient-architecture-failure-response"
-    health_check = "doc-example-resilient-architecture-health-check"
+    table: str = "doc-example-resilient-architecture-table"
+    failure_response: str = "doc-example-resilient-architecture-failure-response"
+    health_check: str = "doc-example-resilient-architecture-health-check"
 
-    def __init__(self, table_name, ssm_client):
+    def __init__(self, table_name: str, ssm_client: boto3.client):
         """
+        Initializes the ParameterHelper class with the necessary parameters.
+
         :param table_name: The name of the DynamoDB table that is used as a recommendation
                            service.
         :param ssm_client: A Boto3 Systems Manager client.
@@ -35,11 +41,18 @@ class ParameterHelper:
         self.table_name = table_name
 
     @classmethod
-    def from_client(cls, table_name):
+    def from_client(cls: Type['ParameterHelper'], table_name: str) -> 'ParameterHelper':
+        """
+        Creates this class from a Boto3 client.
+
+        :param table_name: The name of the DynamoDB table that is used as a recommendation
+                           service.
+        :return: An instance of the ParameterHelper class.
+        """
         ssm_client = boto3.client("ssm")
         return cls(table_name, ssm_client)
 
-    def reset(self):
+    def reset(self) -> None:
         """
         Resets the Systems Manager parameters to starting values for the demo.
         These are the name of the DynamoDB recommendation table, no response when a
@@ -49,12 +62,13 @@ class ParameterHelper:
         self.put(self.failure_response, "none")
         self.put(self.health_check, "shallow")
 
-    def put(self, name, value):
+    def put(self, name: str, value: str) -> None:
         """
         Sets the value of a named Systems Manager parameter.
 
         :param name: The name of the parameter.
         :param value: The new value of the parameter.
+        :raises ParameterHelperError: If the parameter value cannot be set.
         """
         try:
             self.ssm_client.put_parameter(

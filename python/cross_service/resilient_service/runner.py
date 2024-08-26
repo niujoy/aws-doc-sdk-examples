@@ -14,6 +14,7 @@ import argparse
 import logging
 from pprint import pp
 import sys
+from typing import List
 
 import requests
 
@@ -29,9 +30,27 @@ import demo_tools.question as q
 
 # snippet-start:[python.example_code.workflow.ResilientService_Runner]
 class Runner:
+    """
+    Manages the deployment, demonstration, and destruction of resources for the resilient service.
+    """
+
     def __init__(
-        self, resource_path, recommendation, autoscaler, loadbalancer, param_helper
+        self,
+        resource_path: str,
+        recommendation: RecommendationService,
+        autoscaler: AutoScaler,
+        loadbalancer: LoadBalancer,
+        param_helper: ParameterHelper,
     ):
+        """
+        Initializes the Runner class with the necessary parameters.
+
+        :param resource_path: The path to resource files used by this example, such as IAM policies and instance scripts.
+        :param recommendation: An instance of the RecommendationService class.
+        :param autoscaler: An instance of the AutoScaler class.
+        :param loadbalancer: An instance of the LoadBalancer class.
+        :param param_helper: An instance of the ParameterHelper class.
+        """
         self.resource_path = resource_path
         self.recommendation = recommendation
         self.autoscaler = autoscaler
@@ -41,7 +60,11 @@ class Runner:
         self.port = 80
         self.ssh_port = 22
 
-    def deploy(self):
+    def deploy(self) -> None:
+        """
+        Deploys the resources required for the resilient service, including the DynamoDB table,
+        EC2 instances, Auto Scaling group, and load balancer.
+        """
         recommendations_path = f"{self.resource_path}/recommendations.json"
         startup_script = f"{self.resource_path}/server_startup_script.sh"
         instance_policy = f"{self.resource_path}/instance_policy.json"
@@ -171,7 +194,11 @@ class Runner:
         print("-" * 88)
         q.ask("Press Enter when you're ready to continue with the demo.")
 
-    def demo_choices(self):
+    def demo_choices(self) -> None:
+        """
+        Presents choices for interacting with the deployed service, such as sending requests to
+        the load balancer or checking the health of the targets.
+        """
         actions = [
             "Send a GET request to the load balancer endpoint.",
             "Check the health of load balancer targets.",
@@ -213,7 +240,11 @@ class Runner:
                 print("\nOkay, let's move on.")
                 print("-" * 88)
 
-    def demo(self):
+    def demo(self) -> None:
+        """
+        Runs the demonstration, showing how the service responds to different failure scenarios
+        and how a resilient architecture can keep the service running.
+        """
         ssm_only_policy = f"{self.resource_path}/ssm_only_policy.json"
 
         print("\nResetting parameters to starting values for demo.\n")
@@ -332,7 +363,11 @@ class Runner:
         self.demo_choices()
         self.param_helper.reset()
 
-    def destroy(self):
+    def destroy(self) -> None:
+        """
+        Destroys all resources created for the demo, including the load balancer, Auto Scaling group,
+        EC2 instances, and DynamoDB table.
+        """
         print(
             "This concludes the demo of how to build and manage a resilient service.\n"
             "To keep things tidy and to avoid unwanted charges on your account, we can clean up all AWS resources\n"
@@ -356,7 +391,10 @@ class Runner:
             )
 
 
-def main():
+def main() -> None:
+    """
+    Main function to parse arguments and run the appropriate actions for the demo.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--action",

@@ -6,6 +6,7 @@ import json
 import logging
 import time
 from os import remove, chmod
+from typing import List, Tuple, Dict, Any
 
 import boto3
 from botocore.exceptions import ClientError
@@ -14,6 +15,9 @@ log = logging.getLogger(__name__)
 
 
 class AutoScalerError(Exception):
+    """
+    Custom exception for AutoScaler errors.
+    """
     pass
 
 
@@ -26,19 +30,20 @@ class AutoScaler:
 
     def __init__(
         self,
-        resource_prefix,
-        inst_type,
-        ami_param,
-        autoscaling_client,
-        ec2_client,
-        ssm_client,
-        iam_client,
+        resource_prefix: str,
+        inst_type: str,
+        ami_param: str,
+        autoscaling_client: boto3.client,
+        ec2_client: boto3.client,
+        ssm_client: boto3.client,
+        iam_client: boto3.client,
     ):
         """
+        Initializes the AutoScaler class with the necessary parameters.
+
         :param resource_prefix: The prefix for naming AWS resources that are created by this class.
         :param inst_type: The type of EC2 instance to create, such as t3.micro.
-        :param ami_param: The Systems Manager parameter used to look up the AMI that is
-                          created.
+        :param ami_param: The Systems Manager parameter used to look up the AMI that is created.
         :param autoscaling_client: A Boto3 EC2 Auto Scaling client.
         :param ec2_client: A Boto3 EC2 client.
         :param ssm_client: A Boto3 Systems Manager client.
@@ -63,11 +68,12 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.AutoScaler.decl]
 
     @classmethod
-    def from_client(cls, resource_prefix):
+    def from_client(cls, resource_prefix: str) -> 'AutoScaler':
         """
         Creates this class from Boto3 clients.
 
         :param resource_prefix: The prefix for naming AWS resources that are created by this class.
+        :return: An instance of the AutoScaler class.
         """
         as_client = boto3.client("autoscaling")
         ec2_client = boto3.client("ec2")
@@ -85,8 +91,9 @@ class AutoScaler:
 
     # snippet-start:[python.cross_service.resilient_service.iam.CreateInstanceProfile]
     def create_instance_profile(
-        self, policy_file, policy_name, role_name, profile_name, aws_managed_policies=()
-    ):
+        self, policy_file: str, policy_name: str, role_name: str,
+        profile_name: str, aws_managed_policies: Tuple[str, ...] = ()
+    ) -> str:
         """
         Creates a policy, role, and profile that is associated with instances created by
         this class. An instance's associated profile defines a role that is assumed by the
@@ -102,6 +109,7 @@ class AutoScaler:
                                      the role, such as AmazonSSMManagedInstanceCore to grant
                                      use of Systems Manager to send commands to the instance.
         :return: The ARN of the profile that is created.
+        :raises AutoScalerError: If the policy, role, or profile creation fails.
         """
         assume_role_doc = {
             "Version": "2012-10-17",
@@ -182,12 +190,13 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.iam.CreateInstanceProfile]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.DescribeIamInstanceProfileAssociations]
-    def get_instance_profile(self, instance_id):
+    def get_instance_profile(self, instance_id: str) -> Dict[str, Any]:
         """
         Gets data about the profile associated with an instance.
 
         :param instance_id: The ID of the instance to look up.
         :return: The profile data.
+        :raises AutoScalerError: If unable to retrieve the instance profile data.
         """
         try:
             response = self.ec2_client.describe_iam_instance_profile_associations(
@@ -204,8 +213,8 @@ class AutoScaler:
 
     # snippet-start:[python.cross_service.resilient_service.ec2.ReplaceIamInstanceProfileAssociation]
     def replace_instance_profile(
-        self, instance_id, new_instance_profile_name, profile_association_id
-    ):
+        self, instance_id: str, new_instance_profile_name: str, profile_association_id: str
+    ) -> None:
         """
         Replaces the profile associated with a running instance. After the profile is
         replaced, the instance is rebooted to ensure that it uses the new profile. When
@@ -216,6 +225,7 @@ class AutoScaler:
                                           the specified instance.
         :param profile_association_id: The ID of the existing profile association for the
                                        instance.
+        :raises AutoScalerError: If the instance profile replacement or reboot fails.
         """
         try:
             self.ec2_client.replace_iam_instance_profile_association(
@@ -228,21 +238,18 @@ class AutoScaler:
                 new_instance_profile_name,
             )
             time.sleep(5)
-            inst_ready = False
-            tries = 0
-            while not inst_ready:
-                if tries % 6 == 0:
-                    self.ec2_client.reboot_instances(InstanceIds=[instance_id])
-                    log.info(
-                        "Rebooting instance %s and waiting for it to to be ready.",
-                        instance_id,
-                    )
-                tries += 1
-                time.sleep(10)
-                response = self.ssm_client.describe_instance_information()
-                for info in response["InstanceInformationList"]:
-                    if info["InstanceId"] == instance_id:
-                        inst_ready = True
+            self.ec2_client.reboot_instances(InstanceIds=[instance_id])
+            log.info("Rebooting instance %s.", instance_id)
+
+            # Create the waiter
+            waiter = self.ec2_client.get_waiter('instance_running')
+
+            # Wait until the instance is running
+            log.info("Waiting for instance %s to be running.", instance_id)
+            waiter.wait(
+                InstanceIds=[instance_id]
+            )
+            log.info("Instance %s is now running.", instance_id)
             self.ssm_client.send_command(
                 InstanceIds=[instance_id],
                 DocumentName="AWS-RunShellScript",
@@ -257,13 +264,14 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.ReplaceIamInstanceProfileAssociation]
 
     # snippet-start:[python.cross_service.resilient_service.iam.DeleteInstanceProfile]
-    def delete_instance_profile(self, profile_name, role_name):
+    def delete_instance_profile(self, profile_name: str, role_name: str) -> None:
         """
         Detaches a role from an instance profile, detaches policies from the role,
         and deletes all the resources.
 
         :param profile_name: The name of the profile to delete.
         :param role_name: The name of the role to delete.
+        :raises AutoScalerError: If the profile, role, or policies cannot be deleted.
         """
         try:
             self.iam_client.remove_role_from_instance_profile(
@@ -297,12 +305,12 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.iam.DeleteInstanceProfile]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.CreateKeyPair]
-    def create_key_pair(self, key_pair_name):
+    def create_key_pair(self, key_pair_name: str) -> None:
         """
         Creates a new key pair.
 
         :param key_pair_name: The name of the key pair to create.
-        :return: The newly created key pair.
+        :raises AutoScalerError: If the key pair creation fails.
         """
         try:
             response = self.ec2_client.create_key_pair(KeyName=key_pair_name)
@@ -316,11 +324,11 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.CreateKeyPair]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.DeleteKeyPair]
-    def delete_key_pair(self):
+    def delete_key_pair(self) -> None:
         """
         Deletes a key pair.
 
-        :param key_pair_name: The name of the key pair to delete.
+        :raises AutoScalerError: If the key pair deletion fails.
         """
         try:
             self.ec2_client.delete_key_pair(KeyName=self.key_pair_name)
@@ -344,7 +352,7 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.DeleteKeyPair]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.CreateLaunchTemplate]
-    def create_template(self, server_startup_script_file, instance_policy_file):
+    def create_template(self, server_startup_script_file: str, instance_policy_file: str) -> Dict[str, Any]:
         """
         Creates an Amazon EC2 launch template to use with Amazon EC2 Auto Scaling. The
         launch template specifies a Bash script in its user data field that runs after
@@ -356,6 +364,7 @@ class AutoScaler:
         :param instance_policy_file: The path to a file that defines a permissions policy
                                      to create and attach to the instance profile.
         :return: Information about the newly created template.
+        :raises AutoScalerError: If the template creation fails.
         """
         template = {}
         try:
@@ -407,9 +416,11 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.CreateLaunchTemplate]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.DeleteLaunchTemplate]
-    def delete_template(self):
+    def delete_template(self) -> None:
         """
         Deletes a launch template.
+
+        :raises AutoScalerError: If the template deletion fails.
         """
         try:
             self.ec2_client.delete_launch_template(
@@ -436,11 +447,12 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.DeleteLaunchTemplate]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.DescribeAvailabilityZones]
-    def get_availability_zones(self):
+    def get_availability_zones(self) -> List[str]:
         """
         Gets a list of Availability Zones in the AWS Region of the Amazon EC2 client.
 
         :return: The list of Availability Zones for the client Region.
+        :raises AutoScalerError: If unable to retrieve the availability zones.
         """
         try:
             response = self.ec2_client.describe_availability_zones()
@@ -453,13 +465,14 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.DescribeAvailabilityZones]
 
     # snippet-start:[python.cross_service.resilient_service.auto-scaling.CreateAutoScalingGroup]
-    def create_group(self, group_size):
+    def create_group(self, group_size: int) -> List[str]:
         """
         Creates an EC2 Auto Scaling group with the specified size.
 
         :param group_size: The number of instances to set for the minimum and maximum in
                            the group.
         :return: The list of Availability Zones specified for the group.
+        :raises AutoScalerError: If the Auto Scaling group creation fails.
         """
         zones = []
         try:
@@ -494,11 +507,12 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.auto-scaling.CreateAutoScalingGroup]
 
     # snippet-start:[python.cross_service.resilient_service.auto-scaling.DescribeAutoScalingGroups]
-    def get_instances(self):
+    def get_instances(self) -> List[str]:
         """
         Gets data about the instances in the EC2 Auto Scaling group.
 
         :return: Data about the instances.
+        :raises AutoScalerError: If unable to retrieve instances data.
         """
         try:
             as_response = self.autoscaling_client.describe_auto_scaling_groups(
@@ -517,12 +531,13 @@ class AutoScaler:
 
     # snippet-end:[python.cross_service.resilient_service.auto-scaling.DescribeAutoScalingGroups]
 
-    def terminate_instance(self, instance_id):
+    def terminate_instance(self, instance_id: str) -> None:
         """
-        Terminates and instances in an EC2 Auto Scaling group. After an instance is
+        Terminates an instance in an EC2 Auto Scaling group. After an instance is
         terminated, it can no longer be accessed.
 
         :param instance_id: The ID of the instance to terminate.
+        :raises AutoScalerError: If the instance termination fails.
         """
         try:
             self.autoscaling_client.terminate_instance_in_auto_scaling_group(
@@ -533,13 +548,14 @@ class AutoScaler:
             raise AutoScalerError(f"Couldn't terminate instance {instance_id}: {err}")
 
     # snippet-start:[python.cross_service.resilient_service.auto-scaling.AttachLoadBalancerTargetGroups]
-    def attach_load_balancer_target_group(self, lb_target_group):
+    def attach_load_balancer_target_group(self, lb_target_group: Dict[str, Any]) -> None:
         """
         Attaches an Elastic Load Balancing (ELB) target group to this EC2 Auto Scaling group.
         The target group specifies how the load balancer forward requests to the instances
         in the group.
 
         :param lb_target_group: Data about the ELB target group to attach.
+        :raises AutoScalerError: If the target group attachment fails.
         """
         try:
             self.autoscaling_client.attach_load_balancer_target_groups(
@@ -560,7 +576,14 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.auto-scaling.AttachLoadBalancerTargetGroups]
 
     # snippet-start:[python.cross_service.resilient_service.auto-scaling.DeleteAutoScalingGroup]
-    def _try_terminate_instance(self, inst_id):
+    def _try_terminate_instance(self, inst_id: str) -> None:
+        """
+        Tries to terminate a specific instance in an EC2 Auto Scaling group.
+        If scaling activity is in progress, it waits until the instance can be terminated.
+
+        :param inst_id: The ID of the instance to terminate.
+        :raises AutoScalerError: If unable to terminate the instance.
+        """
         stopping = False
         log.info(f"Stopping {inst_id}.")
         while not stopping:
@@ -576,10 +599,12 @@ class AutoScaler:
                 else:
                     raise AutoScalerError(f"Couldn't stop instance {inst_id}: {err}.")
 
-    def _try_delete_group(self):
+    def _try_delete_group(self) -> None:
         """
         Tries to delete the EC2 Auto Scaling group. If the group is in use or in progress,
         the function waits and retries until the group is successfully deleted.
+
+        :raises AutoScalerError: If unable to delete the Auto Scaling group.
         """
         stopped = False
         while not stopped:
@@ -603,9 +628,11 @@ class AutoScaler:
                         f"Couldn't delete group {self.group_name}: {err}."
                     )
 
-    def delete_group(self):
+    def delete_group(self) -> None:
         """
-        Terminates all instances in the group, deletes the EC2 Auto Scaling group.
+        Terminates all instances in the group, then deletes the EC2 Auto Scaling group.
+
+        :raises AutoScalerError: If the Auto Scaling group deletion fails.
         """
         try:
             response = self.autoscaling_client.describe_auto_scaling_groups(
@@ -628,11 +655,12 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.auto-scaling.DeleteAutoScalingGroup]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.DescribeVpcs]
-    def get_default_vpc(self):
+    def get_default_vpc(self) -> Dict[str, Any]:
         """
         Gets the default VPC for the account.
 
         :return: Data about the default VPC.
+        :raises AutoScalerError: If unable to retrieve the default VPC.
         """
         try:
             response = self.ec2_client.describe_vpcs(
@@ -646,7 +674,7 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.DescribeVpcs]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.DescribeSecurityGroups]
-    def verify_inbound_port(self, vpc, port, ip_address):
+    def verify_inbound_port(self, vpc: Dict[str, Any], port: int, ip_address: str) -> Tuple[Dict[str, Any], bool]:
         """
         Verify the default security group of the specified VPC allows ingress from this
         computer. This can be done by allowing ingress from this computer's IP
@@ -658,8 +686,9 @@ class AutoScaler:
         :param vpc: The VPC used by this example.
         :param port: The port to verify.
         :param ip_address: This computer's IP address.
-        :return: The default security group of the specific VPC, and a value that indicates
+        :return: The default security group of the specified VPC, and a value that indicates
                  whether the specified port is open.
+        :raises AutoScalerError: If unable to verify the inbound port.
         """
         try:
             response = self.ec2_client.describe_security_groups(
@@ -698,7 +727,7 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.DescribeSecurityGroups]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.AuthorizeSecurityGroupIngress]
-    def open_inbound_port(self, sec_group_id, port, ip_address):
+    def open_inbound_port(self, sec_group_id: str, port: int, ip_address: str) -> None:
         """
         Add an ingress rule to the specified security group that allows access on the
         specified port from the specified IP address.
@@ -706,6 +735,7 @@ class AutoScaler:
         :param sec_group_id: The ID of the security group to modify.
         :param port: The port to open.
         :param ip_address: The IP address that is granted access.
+        :raises AutoScalerError: If unable to authorize the ingress rule.
         """
         try:
             self.ec2_client.authorize_security_group_ingress(
@@ -729,13 +759,14 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.AuthorizeSecurityGroupIngress]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.DescribeSubnets]
-    def get_subnets(self, vpc_id, zones):
+    def get_subnets(self, vpc_id: str, zones: List[str]) -> List[Dict[str, Any]]:
         """
         Gets the default subnets in a VPC for a specified list of Availability Zones.
 
         :param vpc_id: The ID of the VPC to look up.
         :param zones: The list of Availability Zones to look up.
         :return: The list of subnets found.
+        :raises AutoScalerError: If unable to retrieve the subnets.
         """
         try:
             response = self.ec2_client.describe_subnets(
@@ -753,6 +784,5 @@ class AutoScaler:
             return subnets
 
     # snippet-end:[python.cross_service.resilient_service.ec2.DescribeSubnets]
-
 
 # snippet-end:[python.example_code.workflow.ResilientService_AutoScaler]

@@ -3,6 +3,7 @@
 
 import logging
 import time
+from typing import List, Dict, Any, Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -12,6 +13,9 @@ log = logging.getLogger(__name__)
 
 
 class LoadBalancerError(Exception):
+    """
+    Custom exception for LoadBalancer errors.
+    """
     pass
 
 
@@ -20,8 +24,10 @@ class LoadBalancerError(Exception):
 class LoadBalancer:
     """Encapsulates Elastic Load Balancing (ELB) actions."""
 
-    def __init__(self, target_group_name, load_balancer_name, elb_client):
+    def __init__(self, target_group_name: str, load_balancer_name: str, elb_client: boto3.client):
         """
+        Initializes the LoadBalancer class with the necessary parameters.
+
         :param target_group_name: The name of the target group associated with the load balancer.
         :param load_balancer_name: The name of the load balancer.
         :param elb_client: A Boto3 Elastic Load Balancing client.
@@ -29,26 +35,28 @@ class LoadBalancer:
         self.target_group_name = target_group_name
         self.load_balancer_name = load_balancer_name
         self.elb_client = elb_client
-        self._endpoint = None
+        self._endpoint: Optional[str] = None
 
     # snippet-end:[python.cross_service.resilient_service.LoadBalancer.decl]
 
     @classmethod
-    def from_client(cls, resource_prefix):
+    def from_client(cls, resource_prefix: str) -> 'LoadBalancer':
         """
         Creates this class from a Boto3 client.
 
         :param resource_prefix: The prefix to give to AWS resources created by this class.
+        :return: An instance of the LoadBalancer class.
         """
         elb_client = boto3.client("elbv2")
         return cls(f"{resource_prefix}-tg", f"{resource_prefix}-lb", elb_client)
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.DescribeLoadBalancers]
-    def endpoint(self):
+    def endpoint(self) -> str:
         """
         Gets the HTTP endpoint of the load balancer.
 
         :return: The endpoint.
+        :raises LoadBalancerError: If unable to retrieve the endpoint.
         """
         if self._endpoint is None:
             try:
@@ -65,10 +73,10 @@ class LoadBalancer:
     # snippet-end:[python.cross_service.resilient_service.elbv2.DescribeLoadBalancers]
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.CreateTargetGroup]
-    def create_target_group(self, protocol, port, vpc_id):
+    def create_target_group(self, protocol: str, port: int, vpc_id: str) -> Dict[str, Any]:
         """
         Creates an Elastic Load Balancing target group. The target group specifies how
-        the load balancer forward requests to instances in the group and how instance
+        the load balancer forwards requests to instances in the group and how instance
         health is checked.
 
         To speed up this demo, the health check is configured with shortened times and
@@ -79,6 +87,7 @@ class LoadBalancer:
         :param port: The port to use to forward requests, such as 80.
         :param vpc_id: The ID of the VPC in which the load balancer exists.
         :return: Data about the newly created target group.
+        :raises LoadBalancerError: If the target group creation fails.
         """
         try:
             response = self.elb_client.create_target_group(
@@ -104,9 +113,11 @@ class LoadBalancer:
     # snippet-end:[python.cross_service.resilient_service.elbv2.CreateTargetGroup]
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.DeleteTargetGroup]
-    def delete_target_group(self):
+    def delete_target_group(self) -> None:
         """
         Deletes the target group.
+
+        :raises LoadBalancerError: If the target group deletion fails.
         """
         done = False
         while not done:
@@ -141,7 +152,7 @@ class LoadBalancer:
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.CreateLoadBalancer]
     # snippet-start:[python.cross_service.resilient_service.elbv2.CreateListener]
-    def create_load_balancer(self, subnet_ids, target_group):
+    def create_load_balancer(self, subnet_ids: List[str], target_group: Dict[str, Any]) -> Dict[str, Any]:
         """
         Creates an Elastic Load Balancing load balancer that uses the specified subnets
         and forwards requests to the specified target group.
@@ -150,6 +161,7 @@ class LoadBalancer:
         :param target_group: An existing target group that is added as a listener to the
                              load balancer.
         :return: Data about the newly created load balancer.
+        :raises LoadBalancerError: If the load balancer creation or listener addition fails.
         """
         try:
             response = self.elb_client.create_load_balancer(
@@ -190,9 +202,11 @@ class LoadBalancer:
     # snippet-end:[python.cross_service.resilient_service.elbv2.CreateLoadBalancer]
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.DeleteLoadBalancer]
-    def delete_load_balancer(self):
+    def delete_load_balancer(self) -> None:
         """
         Deletes a load balancer.
+
+        :raises LoadBalancerError: If the load balancer deletion fails.
         """
         try:
             response = self.elb_client.describe_load_balancers(
@@ -217,9 +231,11 @@ class LoadBalancer:
 
     # snippet-end:[python.cross_service.resilient_service.elbv2.DeleteLoadBalancer]
 
-    def verify_load_balancer_endpoint(self):
+    def verify_load_balancer_endpoint(self) -> bool:
         """
         Verify this computer can successfully send a GET request to the load balancer endpoint.
+
+        :return: True if the GET request is successful, False otherwise.
         """
         success = False
         retries = 3
@@ -243,11 +259,12 @@ class LoadBalancer:
         return success
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.DescribeTargetHealth]
-    def check_target_health(self):
+    def check_target_health(self) -> List[Dict[str, Any]]:
         """
         Checks the health of the instances in the target group.
 
         :return: The health status of the target group.
+        :raises LoadBalancerError: If unable to check the health of the targets.
         """
         try:
             tg_response = self.elb_client.describe_target_groups(
@@ -264,6 +281,5 @@ class LoadBalancer:
             return health_response["TargetHealthDescriptions"]
 
     # snippet-end:[python.cross_service.resilient_service.elbv2.DescribeTargetHealth]
-
 
 # snippet-end:[python.example_code.workflow.ResilientService_LoadBalancer]
