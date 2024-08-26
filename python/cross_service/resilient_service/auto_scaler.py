@@ -5,8 +5,8 @@ import base64
 import json
 import logging
 import time
-from os import remove, chmod
-from typing import List, Tuple, Dict, Any
+from os import chmod, remove
+from typing import Any, Dict, List, Tuple
 
 import boto3
 from botocore.exceptions import ClientError
@@ -18,6 +18,7 @@ class AutoScalerError(Exception):
     """
     Custom exception for AutoScaler errors.
     """
+
     pass
 
 
@@ -68,7 +69,7 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.AutoScaler.decl]
 
     @classmethod
-    def from_client(cls, resource_prefix: str) -> 'AutoScaler':
+    def from_client(cls, resource_prefix: str) -> "AutoScaler":
         """
         Creates this class from Boto3 clients.
 
@@ -91,8 +92,12 @@ class AutoScaler:
 
     # snippet-start:[python.cross_service.resilient_service.iam.CreateInstanceProfile]
     def create_instance_profile(
-        self, policy_file: str, policy_name: str, role_name: str,
-        profile_name: str, aws_managed_policies: Tuple[str, ...] = ()
+        self,
+        policy_file: str,
+        policy_name: str,
+        role_name: str,
+        profile_name: str,
+        aws_managed_policies: Tuple[str, ...] = (),
     ) -> str:
         """
         Creates a policy, role, and profile that is associated with instances created by
@@ -213,7 +218,10 @@ class AutoScaler:
 
     # snippet-start:[python.cross_service.resilient_service.ec2.ReplaceIamInstanceProfileAssociation]
     def replace_instance_profile(
-        self, instance_id: str, new_instance_profile_name: str, profile_association_id: str
+        self,
+        instance_id: str,
+        new_instance_profile_name: str,
+        profile_association_id: str,
     ) -> None:
         """
         Replaces the profile associated with a running instance. After the profile is
@@ -242,13 +250,11 @@ class AutoScaler:
             log.info("Rebooting instance %s.", instance_id)
 
             # Create the waiter
-            waiter = self.ec2_client.get_waiter('instance_running')
+            waiter = self.ec2_client.get_waiter("instance_running")
 
             # Wait until the instance is running
             log.info("Waiting for instance %s to be running.", instance_id)
-            waiter.wait(
-                InstanceIds=[instance_id]
-            )
+            waiter.wait(InstanceIds=[instance_id])
             log.info("Instance %s is now running.", instance_id)
             self.ssm_client.send_command(
                 InstanceIds=[instance_id],
@@ -352,7 +358,9 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.DeleteKeyPair]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.CreateLaunchTemplate]
-    def create_template(self, server_startup_script_file: str, instance_policy_file: str) -> Dict[str, Any]:
+    def create_template(
+        self, server_startup_script_file: str, instance_policy_file: str
+    ) -> Dict[str, Any]:
         """
         Creates an Amazon EC2 launch template to use with Amazon EC2 Auto Scaling. The
         launch template specifies a Bash script in its user data field that runs after
@@ -548,7 +556,9 @@ class AutoScaler:
             raise AutoScalerError(f"Couldn't terminate instance {instance_id}: {err}")
 
     # snippet-start:[python.cross_service.resilient_service.auto-scaling.AttachLoadBalancerTargetGroups]
-    def attach_load_balancer_target_group(self, lb_target_group: Dict[str, Any]) -> None:
+    def attach_load_balancer_target_group(
+        self, lb_target_group: Dict[str, Any]
+    ) -> None:
         """
         Attaches an Elastic Load Balancing (ELB) target group to this EC2 Auto Scaling group.
         The target group specifies how the load balancer forward requests to the instances
@@ -674,7 +684,9 @@ class AutoScaler:
     # snippet-end:[python.cross_service.resilient_service.ec2.DescribeVpcs]
 
     # snippet-start:[python.cross_service.resilient_service.ec2.DescribeSecurityGroups]
-    def verify_inbound_port(self, vpc: Dict[str, Any], port: int, ip_address: str) -> Tuple[Dict[str, Any], bool]:
+    def verify_inbound_port(
+        self, vpc: Dict[str, Any], port: int, ip_address: str
+    ) -> Tuple[Dict[str, Any], bool]:
         """
         Verify the default security group of the specified VPC allows ingress from this
         computer. This can be done by allowing ingress from this computer's IP
@@ -784,5 +796,6 @@ class AutoScaler:
             return subnets
 
     # snippet-end:[python.cross_service.resilient_service.ec2.DescribeSubnets]
+
 
 # snippet-end:[python.example_code.workflow.ResilientService_AutoScaler]

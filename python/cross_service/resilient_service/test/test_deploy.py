@@ -4,10 +4,11 @@
 import logging
 import time
 from unittest.mock import MagicMock
-from botocore.exceptions import ClientError, WaiterError
-from botocore.stub import ANY
+
 import pytest
 import requests
+from botocore.exceptions import ClientError, WaiterError
+from botocore.stub import ANY
 
 from auto_scaler import AutoScalerError
 from load_balancer import LoadBalancerError

@@ -1,8 +1,8 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-from botocore.exceptions import ClientError, WaiterError
 import pytest
+from botocore.exceptions import ClientError, WaiterError
 
 from auto_scaler import AutoScalerError
 from load_balancer import LoadBalancerError

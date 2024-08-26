@@ -3,11 +3,11 @@
 
 import logging
 import time
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 import boto3
-from botocore.exceptions import ClientError
 import requests
+from botocore.exceptions import ClientError
 
 log = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ class LoadBalancerError(Exception):
     """
     Custom exception for LoadBalancer errors.
     """
+
     pass
 
 
@@ -24,7 +25,9 @@ class LoadBalancerError(Exception):
 class LoadBalancer:
     """Encapsulates Elastic Load Balancing (ELB) actions."""
 
-    def __init__(self, target_group_name: str, load_balancer_name: str, elb_client: boto3.client):
+    def __init__(
+        self, target_group_name: str, load_balancer_name: str, elb_client: boto3.client
+    ):
         """
         Initializes the LoadBalancer class with the necessary parameters.
 
@@ -40,7 +43,7 @@ class LoadBalancer:
     # snippet-end:[python.cross_service.resilient_service.LoadBalancer.decl]
 
     @classmethod
-    def from_client(cls, resource_prefix: str) -> 'LoadBalancer':
+    def from_client(cls, resource_prefix: str) -> "LoadBalancer":
         """
         Creates this class from a Boto3 client.
 
@@ -73,7 +76,9 @@ class LoadBalancer:
     # snippet-end:[python.cross_service.resilient_service.elbv2.DescribeLoadBalancers]
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.CreateTargetGroup]
-    def create_target_group(self, protocol: str, port: int, vpc_id: str) -> Dict[str, Any]:
+    def create_target_group(
+        self, protocol: str, port: int, vpc_id: str
+    ) -> Dict[str, Any]:
         """
         Creates an Elastic Load Balancing target group. The target group specifies how
         the load balancer forwards requests to instances in the group and how instance
@@ -152,7 +157,9 @@ class LoadBalancer:
 
     # snippet-start:[python.cross_service.resilient_service.elbv2.CreateLoadBalancer]
     # snippet-start:[python.cross_service.resilient_service.elbv2.CreateListener]
-    def create_load_balancer(self, subnet_ids: List[str], target_group: Dict[str, Any]) -> Dict[str, Any]:
+    def create_load_balancer(
+        self, subnet_ids: List[str], target_group: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Creates an Elastic Load Balancing load balancer that uses the specified subnets
         and forwards requests to the specified target group.
@@ -281,5 +288,6 @@ class LoadBalancer:
             return health_response["TargetHealthDescriptions"]
 
     # snippet-end:[python.cross_service.resilient_service.elbv2.DescribeTargetHealth]
+
 
 # snippet-end:[python.example_code.workflow.ResilientService_LoadBalancer]

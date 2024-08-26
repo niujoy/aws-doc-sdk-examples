@@ -5,11 +5,11 @@ import logging
 
 import pytest
 
+import runner
 from auto_scaler import AutoScaler
 from load_balancer import LoadBalancer
 from parameters import ParameterHelper
 from recommendation_service import RecommendationService
-import runner
 
 
 @pytest.mark.integ

@@ -12,8 +12,8 @@ more resilient when failures occur.
 
 import argparse
 import logging
-from pprint import pp
 import sys
+from pprint import pp
 from typing import List
 
 import requests

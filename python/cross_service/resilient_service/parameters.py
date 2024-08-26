@@ -14,6 +14,7 @@ class ParameterHelperError(Exception):
     """
     Custom exception for ParameterHelper errors.
     """
+
     pass
 
 
@@ -41,7 +42,7 @@ class ParameterHelper:
         self.table_name = table_name
 
     @classmethod
-    def from_client(cls: Type['ParameterHelper'], table_name: str) -> 'ParameterHelper':
+    def from_client(cls: Type["ParameterHelper"], table_name: str) -> "ParameterHelper":
         """
         Creates this class from a Boto3 client.
 

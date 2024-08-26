@@ -46,7 +46,7 @@ class RecommendationService:
         self.dynamodb_client = dynamodb_client
 
     @classmethod
-    def from_client(cls, table_name: str) -> 'RecommendationService':
+    def from_client(cls, table_name: str) -> "RecommendationService":
         """
         Creates this class from a Boto3 client.
 
